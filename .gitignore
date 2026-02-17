@@ -1,0 +1,24 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Java
+target/
+*.class
+*.log
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Application properties
+application-local.yml
+application-dev.yml
