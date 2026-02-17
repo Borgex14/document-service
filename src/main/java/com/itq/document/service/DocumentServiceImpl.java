@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -256,10 +257,10 @@ public class DocumentServiceImpl implements DocumentService {
         ExecutorService executor = Executors.newFixedThreadPool(request.getThreads());
         CountDownLatch latch = new CountDownLatch(request.getAttempts());
 
-        ConcurrentHashMap<String, AtomicInteger> results = new ConcurrentHashMap<>();
-        results.put("success", new AtomicInteger(0));
-        results.put("conflict", new AtomicInteger(0));
-        results.put("error", new AtomicInteger(0));
+        // ИСПРАВЛЕНО: Используем AtomicInteger напрямую
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger conflictCount = new AtomicInteger(0);
+        AtomicInteger errorCount = new AtomicInteger(0);
 
         for (int i = 0; i < request.getAttempts(); i++) {
             executor.submit(() -> {
@@ -267,23 +268,25 @@ public class DocumentServiceImpl implements DocumentService {
                     BatchOperationRequest approveRequest = new BatchOperationRequest();
                     approveRequest.setIds(List.of(request.getDocumentId()));
                     approveRequest.setInitiator(request.getInitiator());
+                    approveRequest.setComment("Concurrency test attempt");
 
                     List<OperationResult> operationResults = approveDocuments(approveRequest);
                     OperationResult result = operationResults.get(0);
 
                     switch (result.getStatus()) {
                         case SUCCESS:
-                            results.get("success").incrementAndGet();
+                            successCount.incrementAndGet();
                             break;
                         case CONFLICT:
                         case REGISTRY_ERROR:
-                            results.get("conflict").incrementAndGet();
+                            conflictCount.incrementAndGet();
                             break;
                         default:
-                            results.get("error").incrementAndGet();
+                            errorCount.incrementAndGet();
                     }
                 } catch (Exception e) {
-                    results.get("error").incrementAndGet();
+                    errorCount.incrementAndGet();
+                    log.error("Error in concurrency test thread: {}", e.getMessage());
                 } finally {
                     latch.countDown();
                 }
@@ -294,25 +297,32 @@ public class DocumentServiceImpl implements DocumentService {
             latch.await(30, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            log.error("Concurrency test interrupted");
         }
 
         executor.shutdown();
 
-        Document finalDocument = documentRepository.findById(request.getDocumentId()).orElse(document);
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+        }
+
+        Document finalDocument = documentRepository.findById(request.getDocumentId())
+                .orElse(document);
         long registryCount = registryRepository.countByDocumentId(request.getDocumentId());
 
         log.info("Concurrency test completed. Success: {}, Conflict: {}, Error: {}, Final status: {}",
-                results.get("success").get(),
-                results.get("conflict").get(),
-                results.get("error").get(),
-                finalDocument.getStatus());
+                successCount.get(), conflictCount.get(), errorCount.get(), finalDocument.getStatus());
 
         return ConcurrencyTestResult.builder()
                 .documentId(request.getDocumentId())
                 .totalAttempts(request.getAttempts())
-                .successfulAttempts(results.get("success").get())
-                .conflictAttempts(results.get("conflict").get())
-                .errorAttempts(results.get("error").get())
+                .successfulAttempts(successCount.get())
+                .conflictAttempts(conflictCount.get())
+                .errorAttempts(errorCount.get())
                 .finalStatus(finalDocument.getStatus().name())
                 .registryEntriesCount(registryCount)
                 .build();
