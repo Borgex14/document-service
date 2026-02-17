@@ -6,10 +6,7 @@ import com.itq.document.model.Document;
 import com.itq.document.model.DocumentStatus;
 import com.itq.document.repository.DocumentRepository;
 import com.itq.document.service.DocumentService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -18,17 +15,26 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ApproveWorker {
 
     private final DocumentRepository documentRepository;
     private final DocumentService documentService;
+    private final long fixedDelay;
+    private final int batchSize;
 
-    @Value("${app.worker.approve.batch-size:100}")
-    private int batchSize;
-
-    @Value("${app.worker.approve.fixed-delay:60000}")
-    private long fixedDelay;
+    // Исправленный конструктор - принимает все необходимые зависимости
+    public ApproveWorker(
+            DocumentRepository documentRepository,
+            DocumentService documentService,
+            long fixedDelay,
+            int batchSize) {
+        this.documentRepository = documentRepository;
+        this.documentService = documentService;
+        this.fixedDelay = fixedDelay;
+        this.batchSize = batchSize;
+        log.info("ApproveWorker initialized with fixedDelay={}, batchSize={}",
+                fixedDelay, batchSize);
+    }
 
     @Scheduled(fixedDelayString = "${app.worker.approve.fixed-delay:60000}")
     public void processSubmittedDocuments() {
@@ -44,7 +50,7 @@ public class ApproveWorker {
             while (true) {
                 // Find batch of SUBMITTED documents
                 List<Document> submittedDocuments = documentRepository
-                        .findByStatus(DocumentStatus.SUBMITTED, PageRequest.of(0, batchSize));
+                        .findByStatus(DocumentStatus.SUBMITTED, org.springframework.data.domain.PageRequest.of(0, batchSize));
 
                 if (submittedDocuments.isEmpty()) {
                     log.info("No more SUBMITTED documents found");
@@ -71,25 +77,17 @@ public class ApproveWorker {
                         .filter(r -> r.getStatus() == OperationResult.OperationStatus.SUCCESS)
                         .count();
 
-                long conflictCount = results.stream()
-                        .filter(r -> r.getStatus() == OperationResult.OperationStatus.CONFLICT)
-                        .count();
-
-                long notFoundCount = results.stream()
-                        .filter(r -> r.getStatus() == OperationResult.OperationStatus.NOT_FOUND)
-                        .count();
-
                 long registryErrorCount = results.stream()
                         .filter(r -> r.getStatus() == OperationResult.OperationStatus.REGISTRY_ERROR)
                         .count();
 
                 totalProcessed += documentIds.size();
                 totalSuccess += successCount;
-                totalFailed += (conflictCount + notFoundCount);
                 totalRegistryErrors += registryErrorCount;
+                totalFailed += (documentIds.size() - successCount - registryErrorCount);
 
-                log.info("Batch results - Success: {}, Conflict: {}, Not Found: {}, Registry Errors: {}",
-                        successCount, conflictCount, notFoundCount, registryErrorCount);
+                log.info("Batch results - Success: {}, Registry Errors: {}, Other: {}",
+                        successCount, registryErrorCount, (documentIds.size() - successCount - registryErrorCount));
 
                 // Log any errors for monitoring
                 results.stream()
