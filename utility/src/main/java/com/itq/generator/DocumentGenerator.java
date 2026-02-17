@@ -1,5 +1,7 @@
 package com.itq.generator;
 
+import com.itq.document.dto.CreateDocumentRequest;
+import com.itq.document.dto.DocumentDto;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.FileSystemResource;
