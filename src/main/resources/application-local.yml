@@ -1,9 +1,9 @@
 # Локальный профиль - максимально подробное логирование
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/document_db_local
-    username: local_user
-    password: local_pass
+    url: jdbc:postgresql://localhost:5432/document_db
+    username: document_user
+    password: document_password
     hikari:
       maximum-pool-size: 5
       connection-timeout: 30000
