@@ -1,0 +1,33 @@
+# Dev профиль - для тестового сервера
+spring:
+  datasource:
+    url: jdbc:postgresql://dev-db-server:5432/document_db_dev
+    username: dev_user
+    password: ${DEV_DB_PASSWORD}  # Пароль из переменных окружения
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+  
+  jpa:
+    show-sql: false  # В dev уже можно отключить детальное SQL
+    properties:
+      hibernate:
+        format_sql: true
+
+app:
+  worker:
+    pool-size: 4
+    submit:
+      fixed-delay: 30000  # 30 секунд
+      batch-size: 100
+    approve:
+      fixed-delay: 30000  # 30 секунд
+      batch-size: 100
+
+logging:
+  level:
+    com.itq.document: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: INFO
+  file:
+    name: ./logs/dev-application.log

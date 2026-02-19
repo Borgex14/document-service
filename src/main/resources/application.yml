@@ -1,40 +1,69 @@
+# Базовые настройки, общие для всех окружений
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/document_db
-    username: document_user
-    password: document_password
+    # Используем плейсхолдеры для переопределения в профилях
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/document_db}
+    username: ${SPRING_DATASOURCE_USERNAME:document_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:document_password}
     driver-class-name: org.postgresql.Driver
-
+  
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: validate  # Никогда не меняйте на create/update в продакшене!
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-    show-sql: false
-
+    show-sql: false  # По умолчанию false, переопределяется в профилях
+  
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.xml
-
+  
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
 
-# Application settings
+# Server settings
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: never
+
+# Application specific settings
 app:
-  batch:
-    submit-size: 100
-    approve-size: 100
   worker:
+    pool-size: 2
     submit:
-      fixed-delay: 60000  # 1 minute
+      fixed-delay: 60000  # 1 минута (базовое значение)
+      batch-size: 100
     approve:
-      fixed-delay: 60000  # 1 minute
+      fixed-delay: 60000  # 1 минута (базовое значение)
+      batch-size: 100
 
+# Logging defaults
 logging:
   level:
-    com.itq.document: DEBUG
+    com.itq.document: INFO
     org.springframework.web: INFO
+    org.hibernate.SQL: WARN
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+# Активный профиль по умолчанию
+profiles:
+    active: local  # или можно оставить пустым, чтобы явно указывать при запуске
