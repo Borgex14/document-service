@@ -17,6 +17,30 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - document-network
+
+  document-service:
+    build: .
+    container_name: document-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/document_db
+      SPRING_DATASOURCE_USERNAME: document_user
+      SPRING_DATASOURCE_PASSWORD: document_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      APP_WORKER_SUBMIT_BATCH_SIZE: 100
+      APP_WORKER_APPROVE_BATCH_SIZE: 100
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - document-network
 
 volumes:
   postgres_data:
+
+networks:
+  document-network:
+    driver: bridge
