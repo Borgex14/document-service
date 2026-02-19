@@ -25,8 +25,12 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: UTC
-    serialization:
-      WRITE_DATES_AS_TIMESTAMPS: false
+    generator:
+      write_numbers_as_strings: false
+      mapper:
+        accept_case_insensitive_properties: false
+      deserialization:
+        accept_float_as_int: true
 
 # Server settings
 server:

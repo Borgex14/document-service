@@ -18,6 +18,18 @@ spring:
     console:
       enabled: true
       path: /h2-console
+      settings:
+        trace: true
+        web-admin: true
+        web-allow-others: true
+
+  server:
+    servlet:
+      session:
+        tracking-modes: cookie
+
+  security:
+    ignored: /h2-console/**
 
 logging:                    # ← logging на верхнем уровне (как spring)
   level:
