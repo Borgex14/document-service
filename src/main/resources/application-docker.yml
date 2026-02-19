@@ -1,0 +1,35 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/document_db}
+    username: ${SPRING_DATASOURCE_USERNAME:document_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:document_password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+app:
+  worker:
+    pool-size: 2
+    submit:
+      fixed-delay: 60000
+      batch-size: ${APP_WORKER_SUBMIT_BATCH_SIZE:100}
+    approve:
+      fixed-delay: 60000
+      batch-size: ${APP_WORKER_APPROVE_BATCH_SIZE:100}
+
+logging:
+  level:
+    com.itq.document: DEBUG
+    org.springframework.web: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
