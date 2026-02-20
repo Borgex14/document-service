@@ -13,7 +13,7 @@ services:
     volumes:
       - ./src/main/resources/db/init-schema.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U document_user"]
+      test: [ "CMD-SHELL", "pg_isready -U document_user -d document_db" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,6 +32,7 @@ services:
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate
       APP_WORKER_SUBMIT_BATCH_SIZE: 100
       APP_WORKER_APPROVE_BATCH_SIZE: 100
+      SPRING_PROFILES_ACTIVE: prod
     depends_on:
       postgres:
         condition: service_healthy
