@@ -185,6 +185,9 @@ curl "http://localhost:8080/api/documents/search?author=Иванов"
 ##### По дате
 curl "http://localhost:8080/api/documents/search?dateFrom=2026-02-01T00:00:00&dateTo=2026-02-20T23:59:59"
 
+Поиск по дате создания (created_at), параметр searchByCreatedAt=true (по умолчанию) или по дате обновления (updated_at),
+searchByCreatedAt=false
+
 ## 🧪 Тестирование
 ### Запуск всех тестов
 bash
@@ -238,17 +241,125 @@ level:
 com.itq.document: DEBUG
 org.springframework.web: DEBUG
 org.hibernate.SQL: DEBUG
-Проверка статуса воркеров
+### Проверка статуса воркеров
 bash
-### Посмотреть активные потоки
+Посмотреть активные потоки
 jstack <pid> | grep worker
 
-### В Docker
+В Docker
 docker exec -it document-app jstack 1 | grep worker
-Профили
+### Профили
 dev - H2 in-memory, подробные логи
 
 prod - PostgreSQL, минимальное логирование
+
+## ⚡ Оптимизация производительности
+### Обработка запросов с 5000+ ID
+Для уверенной работы с большими пакетами документов (5000+ ID) необходимо внести следующие изменения:
+
+#### 1. Пакетная обработка с разбиением
+   java
+   public List<OperationResult> submitDocuments(BatchOperationRequest request) {
+   List<OperationResult> allResults = new ArrayList<>();
+   List<List<Long>> batches = partition(request.getIds(), 500); // 500 ID на пакет
+
+   for (List<Long> batch : batches) {
+   BatchOperationRequest batchRequest = new BatchOperationRequest();
+   batchRequest.setIds(batch);
+   batchRequest.setInitiator(request.getInitiator());
+   batchRequest.setComment(request.getComment());
+
+        allResults.addAll(processBatch(batchRequest));
+   }
+   return allResults;
+   }
+
+private <T> List<List<T>> partition(List<T> list, int size) {
+return IntStream.range(0, (list.size() + size - 1) / size)
+.mapToObj(i -> list.subList(i * size, Math.min((i + 1) * size, list.size())))
+.collect(Collectors.toList());
+}
+#### 2. Оптимизация запросов к БД
+   java
+   @Query("SELECT d FROM Document d WHERE d.id IN :ids")
+   List<Document> findAllByIdInBatch(@Param("ids") List<Long> ids);
+#### 3. Асинхронная обработка
+   java
+   @Async
+   public CompletableFuture<List<OperationResult>> submitDocumentsAsync(BatchOperationRequest request) {
+   return CompletableFuture.completedFuture(submitDocuments(request));
+   }
+#### 4. Настройки пула соединений
+   yaml
+   spring:
+   datasource:
+   hikari:
+   maximum-pool-size: 50
+   connection-timeout: 30000
+   idle-timeout: 600000
+   max-lifetime: 1800000
+#### 5. Индексы для массовых операций
+   sql
+   -- Составной индекс для быстрого поиска по статусу и ID
+   CREATE INDEX idx_documents_status_id ON documents(status, id);
+
+-- Индекс для внешних ключей
+CREATE INDEX idx_history_document_id_created ON document_history(document_id, created_at DESC);
+
+## 🔄 Масштабирование реестра утверждений
+### Отдельная база данных
+#### Конфигурация для отдельной БД реестра
+#### application-prod.yml:
+
+yaml
+spring:
+datasource:
+primary:
+url: jdbc:postgresql://primary-db:5432/document_db
+username: document_user
+password: document_password
+registry:
+url: jdbc:postgresql://registry-db:5432/registry_db
+username: registry_user
+password: registry_password
+#### Конфигурация источников данных:
+
+java
+@Configuration
+public class DatabaseConfig {
+
+    @Bean
+    @Primary
+    @ConfigurationProperties(prefix = "spring.datasource.primary")
+    public DataSource primaryDataSource() {
+        return DataSourceBuilder.create().build();
+    }
+    
+    @Bean
+    @ConfigurationProperties(prefix = "spring.datasource.registry")
+    public DataSource registryDataSource() {
+        return DataSourceBuilder.create().build();
+    }
+    
+    @Bean
+    public JdbcTemplate registryJdbcTemplate() {
+        return new JdbcTemplate(registryDataSource());
+    }
+}
+#### Сервис для работы с отдельным реестром:
+
+java
+@Service
+public class RegistryService {
+
+    private final JdbcTemplate registryJdbcTemplate;
+    
+    @Transactional(transactionManager = "registryTransactionManager")
+    public void registerApproval(Long documentId, String approvedBy) {
+        String sql = "INSERT INTO approval_registry (document_id, approved_by, approved_at) VALUES (?, ?, ?)";
+        registryJdbcTemplate.update(sql, documentId, approvedBy, LocalDateTime.now());
+    }
+}
 
 ## 📝 Лицензия
 Copyright © 2026 Borgex Team
