@@ -1,36 +1,21 @@
 # Базовые настройки, общие для всех окружений
 spring:
+  application:
+    name: document-service
   profiles:
-    active: local
-
-  datasource:
-    # Используем плейсхолдеры для переопределения в профилях
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/document_db}
-    username: ${SPRING_DATASOURCE_USERNAME:document_user}
-    password: ${SPRING_DATASOURCE_PASSWORD:document_password}
-    driver-class-name: org.postgresql.Driver
+    active: dev  # По умолчанию dev профиль
 
   jpa:
-    hibernate:
-      ddl-auto: validate  # Никогда не меняйте на create/update в продакшене!
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-    show-sql: false  # По умолчанию false, переопределяется в профилях
-
-  liquibase:
-    change-log: classpath:db/changelog/db.changelog-master.xml
+    show-sql: true
 
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: UTC
-    generator:
-      write_numbers_as_strings: false
-      mapper:
-        accept_case_insensitive_properties: false
-      deserialization:
-        accept_float_as_int: true
+    default-property-inclusion: non_null
+
 
 # Server settings
 server:
@@ -45,11 +30,47 @@ app:
   worker:
     pool-size: 2
     submit:
-      fixed-delay: 60000  # 1 минута (базовое значение)
+      fixed-delay: 60000  # 1 минута
       batch-size: 100
     approve:
-      fixed-delay: 60000  # 1 минута (базовое значение)
+      fixed-delay: 60000  # 1 минута
       batch-size: 100
+
+# JWT Configuration (если используется)
+jwt:
+  secret-key: ${JWT_SECRET_KEY:dGhpcy1pcy1hLXN1cGVyLXNlY3JldC1rZXktZm9yLWRldmVsb3BtZW50}
+  expiration: 86400000
+  refresh-token:
+    expiration: 604800000
+
+# Swagger/OpenAPI
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    config-url: /v3/api-docs/swagger-config
+    url: /v3/api-docs
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+    info:
+      enabled: true
+
+info:
+  app:
+    name: Document Service
+    version: 1.0.0
+    description: REST API for document management
+    developers: Borgex Team
 
 # Logging defaults
 logging:
@@ -60,13 +81,3 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-
-# Management endpoints
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
-  endpoint:
-    health:
-      show-details: always

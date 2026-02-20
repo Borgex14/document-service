@@ -1,0 +1,65 @@
+# Prod профиль - для production окружения
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    url: jdbc:postgresql://postgres:5432/document_db
+    username: ${DB_USER:document_user}
+    password: ${DB_PASSWORD:document_password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate  # Никогда не create/update в продакшене!
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+    show-sql: false
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+    enabled: true
+    default-schema: public
+
+# Production app settings
+app:
+  worker:
+    pool-size: 4
+    submit:
+      fixed-delay: 60000  # 1 минута
+      batch-size: 500
+    approve:
+      fixed-delay: 60000  # 1 минута
+      batch-size: 500
+
+# Security settings for production
+encryption:
+  key: ${ENCRYPTION_KEY:prod-encryption-key-32-bytes-change-me}
+
+jwt:
+  secret-key: ${JWT_SECRET_KEY}
+  expiration: ${JWT_EXPIRATION:86400000}
+  refresh-token:
+    expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+
+# Logging for production
+logging:
+  level:
+    com.itq.document: WARN
+    org.springframework.web: WARN
+    org.hibernate.SQL: ERROR
+  file:
+    name: /var/log/document-service/application.log
+    max-size: 100MB
+    max-history: 30
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
