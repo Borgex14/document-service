@@ -10,8 +10,6 @@ services:
       POSTGRES_PASSWORD: document_password
     ports:
       - "5432:5432"
-    volumes:
-      - ./src/main/resources/db/init-schema.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U document_user -d document_db" ]
       interval: 10s
@@ -26,7 +24,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/document_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://document-db:5432/document_db
       SPRING_DATASOURCE_USERNAME: document_user
       SPRING_DATASOURCE_PASSWORD: document_password
       SPRING_JPA_HIBERNATE_DDL_AUTO: validate

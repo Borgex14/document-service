@@ -14,7 +14,10 @@ target/
 *.war
 *.ear
 hs_err_pid*
-*.json
+
+# JSON логи
+*-log.json
+*.json.log
 
 # OS
 .DS_Store
