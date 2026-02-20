@@ -1,33 +1,57 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <databaseChangeLog
-xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
-xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
 
-<changeSet id="001" author="developer">
-    <createTable tableName="documents">
-        <column name="id" type="BIGINT" autoIncrement="true">
-            <constraints primaryKey="true" nullable="false"/>
-        </column>
-        <column name="document_number" type="VARCHAR(50)">
-            <constraints unique="true" nullable="false"/>
-        </column>
-        <column name="author" type="VARCHAR(100)">
-            <constraints nullable="false"/>
-        </column>
-        <column name="title" type="VARCHAR(255)">
-            <constraints nullable="false"/>
-        </column>
-        <column name="status" type="VARCHAR(20)">
-            <constraints nullable="false"/>
-        </column>
-        <column name="created_at" type="TIMESTAMP">
-            <constraints nullable="false"/>
-        </column>
-        <column name="updated_at" type="TIMESTAMP">
-            <constraints nullable="false"/>
-        </column>
-    </createTable>
-</changeSet>
+    <changeSet id="001" author="developer">
+        <!-- Precondition: создаем таблицу только если её нет -->
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="documents"/>
+            </not>
+        </preConditions>
+
+        <comment>Creating documents table</comment>
+
+        <createTable tableName="documents">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="document_number" type="VARCHAR(50)">
+                <constraints unique="true" nullable="false"/>
+            </column>
+            <column name="author" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addDefaultValue
+                tableName="documents"
+                columnName="created_at"
+                defaultValueComputed="CURRENT_TIMESTAMP"/>
+
+        <addDefaultValue
+                tableName="documents"
+                columnName="updated_at"
+                defaultValueComputed="CURRENT_TIMESTAMP"/>
+
+        <rollback>
+            <dropTable tableName="documents"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

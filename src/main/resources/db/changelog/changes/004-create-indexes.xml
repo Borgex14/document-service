@@ -6,16 +6,45 @@
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
 
     <changeSet id="004" author="developer">
+        <!-- ЕДИНСТВЕННАЯ секция preConditions в начале -->
+        <preConditions onFail="HALT">
+            <and>
+                <tableExists tableName="documents"/>
+                <tableExists tableName="document_history"/>
+                <tableExists tableName="approval_registry"/>
+            </and>
+        </preConditions>
+
+        <comment>Creating indexes for performance optimization</comment>
+
+        <!-- Индексы создаются без дополнительных preConditions -->
         <createIndex indexName="idx_documents_status" tableName="documents">
             <column name="status"/>
         </createIndex>
 
-        <createIndex indexName="idx_history_document" tableName="document_history">
+        <createIndex indexName="idx_documents_author" tableName="documents">
+            <column name="author"/>
+        </createIndex>
+
+        <createIndex indexName="idx_documents_created_at" tableName="documents">
+            <column name="created_at"/>
+        </createIndex>
+
+        <createIndex indexName="idx_history_document_id" tableName="document_history">
             <column name="document_id"/>
         </createIndex>
 
-        <createIndex indexName="idx_registry_document" tableName="approval_registry">
+        <createIndex indexName="idx_registry_document_id" tableName="approval_registry">
             <column name="document_id"/>
         </createIndex>
+
+        <rollback>
+            <dropIndex indexName="idx_documents_status" tableName="documents"/>
+            <dropIndex indexName="idx_documents_author" tableName="documents"/>
+            <dropIndex indexName="idx_documents_created_at" tableName="documents"/>
+            <dropIndex indexName="idx_history_document_id" tableName="document_history"/>
+            <dropIndex indexName="idx_registry_document_id" tableName="approval_registry"/>
+        </rollback>
     </changeSet>
+
 </databaseChangeLog>
