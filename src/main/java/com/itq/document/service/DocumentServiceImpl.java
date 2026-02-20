@@ -17,6 +17,15 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+/**
+ * Реализация сервиса для управления документами.
+ * Предоставляет функциональность для создания, отправки на утверждение,
+ * утверждения и поиска документов с поддержкой истории изменений.
+ *
+ * @author Borgex Team
+ * @version 1.0
+ * @since 2026-02-20
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -27,6 +36,17 @@ public class DocumentServiceImpl implements DocumentService {
     private final RegistryRepository registryRepository;
     private final DocumentNumberGenerator numberGenerator;
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Создает новый документ со статусом DRAFT.
+     * Генерирует уникальный номер документа через {@link DocumentNumberGenerator}.
+     * </p>
+     *
+     * @param request запрос на создание документа, содержащий автора и название
+     * @return DTO созданного документа
+     * @throws IllegalArgumentException если запрос некорректен
+     */
     @Override
     @Transactional
     public DocumentDto createDocument(CreateDocumentRequest request) {
@@ -45,6 +65,17 @@ public class DocumentServiceImpl implements DocumentService {
         return mapToDto(savedDocument);
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Возвращает документ по его идентификатору вместе с полной историей изменений.
+     * История сортируется по дате создания в обратном порядке (сначала новые).
+     * </p>
+     *
+     * @param id идентификатор документа
+     * @return DTO документа с историей
+     * @throws DocumentNotFoundException если документ с указанным id не найден
+     */
     @Override
     @Transactional(readOnly = true)
     public DocumentWithHistoryDto getDocumentWithHistory(Long id) {
@@ -59,6 +90,17 @@ public class DocumentServiceImpl implements DocumentService {
                 .build();
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Возвращает список документов по переданным идентификаторам.
+     * Порядок элементов в результате не гарантируется.
+     * </p>
+     *
+     * @param ids список идентификаторов документов
+     * @param pageable параметры пагинации
+     * @return список DTO документов
+     */
     @Override
     @Transactional(readOnly = true)
     public List<DocumentDto> getDocumentsBatch(List<Long> ids, Pageable pageable) {
@@ -67,6 +109,21 @@ public class DocumentServiceImpl implements DocumentService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Обрабатывает каждый документ в пакете независимо.
+     * Для успешной обработки документ должен находиться в статусе DRAFT.
+     * После успешной отправки:
+     * <ul>
+     *   <li>Статус документа меняется на SUBMITTED</li>
+     *   <li>Создается запись в истории с действием SUBMIT</li>
+     * </ul>
+     * </p>
+     *
+     * @param request запрос на отправку документов
+     * @return список результатов операции для каждого документа
+     */
     @Override
     @Transactional
     public List<OperationResult> submitDocuments(BatchOperationRequest request) {
@@ -130,6 +187,23 @@ public class DocumentServiceImpl implements DocumentService {
         return results;
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Обрабатывает каждый документ в пакете независимо.
+     * Для успешного утверждения:
+     * <ol>
+     *   <li>Документ должен находиться в статусе SUBMITTED</li>
+     *   <li>Сначала создается запись в реестре утверждений</li>
+     *   <li>При успехе статус документа меняется на APPROVED</li>
+     *   <li>Создается запись в истории с действием APPROVE</li>
+     * </ol>
+     * Если запись в реестре не удалась, статус документа не меняется.
+     * </p>
+     *
+     * @param request запрос на утверждение документов
+     * @return список результатов операции для каждого документа
+     */
     @Override
     @Transactional
     public List<OperationResult> approveDocuments(BatchOperationRequest request) {
@@ -211,6 +285,23 @@ public class DocumentServiceImpl implements DocumentService {
         return results;
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Выполняет поиск документов по заданным критериям.
+     * Поддерживает фильтрацию по:
+     * <ul>
+     *   <li>Статусу документа</li>
+     *   <li>Автору (частичное совпадение)</li>
+     *   <li>Диапазону дат создания или обновления</li>
+     * </ul>
+     * Результаты возвращаются с пагинацией.
+     * </p>
+     *
+     * @param criteria критерии поиска
+     * @param pageable параметры пагинации
+     * @return страница с документами, соответствующими критериям
+     */
     @Override
     @Transactional(readOnly = true)
     public Page<DocumentDto> searchDocuments(DocumentSearchCriteria criteria, Pageable pageable) {
@@ -239,6 +330,22 @@ public class DocumentServiceImpl implements DocumentService {
         return documents.map(this::mapToDto);
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Выполняет тестирование конкурентного доступа к документу.
+     * Создает указанное количество потоков, которые одновременно пытаются
+     * утвердить один и тот же документ. Тест позволяет проверить корректность
+     * работы механизмов блокировок и транзакций.
+     * </p>
+     * <p>
+     * Документ перед тестом сбрасывается в статус SUBMITTED, если он был APPROVED.
+     * </p>
+     *
+     * @param request параметры теста (id документа, количество потоков и попыток)
+     * @return результаты теста: количество успешных, конфликтных и ошибочных попыток
+     * @throws DocumentNotFoundException если документ не найден
+     */
     @Override
     @Transactional
     public ConcurrencyTestResult testConcurrentApproval(ConcurrencyTestRequest request) {
@@ -257,7 +364,6 @@ public class DocumentServiceImpl implements DocumentService {
         ExecutorService executor = Executors.newFixedThreadPool(request.getThreads());
         CountDownLatch latch = new CountDownLatch(request.getAttempts());
 
-        // ИСПРАВЛЕНО: Используем AtomicInteger напрямую
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger conflictCount = new AtomicInteger(0);
         AtomicInteger errorCount = new AtomicInteger(0);
@@ -328,6 +434,12 @@ public class DocumentServiceImpl implements DocumentService {
                 .build();
     }
 
+    /**
+     * Преобразует сущность Document в DTO.
+     *
+     * @param document сущность документа
+     * @return DTO документа
+     */
     private DocumentDto mapToDto(Document document) {
         return DocumentDto.builder()
                 .id(document.getId())
@@ -340,6 +452,12 @@ public class DocumentServiceImpl implements DocumentService {
                 .build();
     }
 
+    /**
+     * Преобразует сущность History в DTO.
+     *
+     * @param history сущность истории
+     * @return DTO истории
+     */
     private HistoryDto mapToHistoryDto(History history) {
         return HistoryDto.builder()
                 .id(history.getId())
