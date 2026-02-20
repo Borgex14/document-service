@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+
+    <changeSet id="004" author="developer">
+        <createIndex indexName="idx_documents_status" tableName="documents">
+            <column name="status"/>
+        </createIndex>
+
+        <createIndex indexName="idx_history_document" tableName="document_history">
+            <column name="document_id"/>
+        </createIndex>
+
+        <createIndex indexName="idx_registry_document" tableName="approval_registry">
+            <column name="document_id"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>
