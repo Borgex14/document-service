@@ -68,25 +68,10 @@ docker-compose down
 docker-compose down -v
 ## 🛠 Утилита генерации документов
 #### Утилита для массовой генерации тестовых документов.
-
-## Структура
-text
-utility/
-├── pom.xml
-├── config/
-│   └── config.properties
-└── src/main/java/com/itq/generator/
-├── DocumentGenerator.java
-├── CreateDocumentRequest.java
-└── DocumentDto.java
 ### 1. Сборка утилиты
    bash
    cd utility
    ../mvnw clean package assembly:single
-### 2. Настройка конфигурации
-   Создайте config/config.properties:
-
-properties
 ### Количество документов для генерации
 document.count=100
 
