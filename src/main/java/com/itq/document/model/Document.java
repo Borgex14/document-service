@@ -38,4 +38,7 @@ public class Document {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @Version
+    private Long version;
 }
