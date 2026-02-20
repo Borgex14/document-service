@@ -76,8 +76,8 @@ class DocumentServiceImplTest {
         testDocument.setAuthor(TEST_AUTHOR);
         testDocument.setTitle(TEST_TITLE);
         testDocument.setStatus(DocumentStatus.DRAFT);
-        testDocument.setCreatedAt(LocalDateTime.now());
-        testDocument.setUpdatedAt(LocalDateTime.now());
+        // УБИРАЕМ установку auto-generated полей createdAt и updatedAt
+        // Hibernate сам их установит при сохранении
     }
 
     // ========================================================================
@@ -123,14 +123,14 @@ class DocumentServiceImplTest {
         history1.setDocument(testDocument);
         history1.setInitiator(TEST_INITIATOR);
         history1.setAction(DocumentAction.SUBMIT);
-        history1.setCreatedAt(LocalDateTime.now());
+        // Не устанавливаем createdAt - он auto-generated
 
         History history2 = new History();
         history2.setId(2L);
         history2.setDocument(testDocument);
         history2.setInitiator(TEST_APPROVER);
         history2.setAction(DocumentAction.APPROVE);
-        history2.setCreatedAt(LocalDateTime.now());
+        // Не устанавливаем createdAt - он auto-generated
 
         when(documentRepository.findById(TEST_DOC_ID)).thenReturn(Optional.of(testDocument));
         when(historyRepository.findByDocumentIdOrderByCreatedAtDesc(TEST_DOC_ID))
