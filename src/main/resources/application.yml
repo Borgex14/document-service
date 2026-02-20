@@ -3,7 +3,7 @@ spring:
   application:
     name: document-service
   profiles:
-    active: prod  # По умолчанию dev профиль
+    active: dev  # По умолчанию dev профиль
 
   jpa:
     properties:
