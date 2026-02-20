@@ -1,0 +1,59 @@
+# Dev профиль - локальная разработка с H2
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  datasource:
+    url: jdbc:h2:mem:documentdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 30000
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+        trace: true
+
+  web:
+    resources:
+      static-locations: classpath:/static/,classpath:/public/,classpath:/h2-console/
+
+# Encryption key for dev
+encryption:
+  key: dev-encryption-key-32-bytes-for-development-only
+
+app:
+  worker:
+    pool-size: 2
+    submit:
+      fixed-delay: 10000  # 10 секунд для быстрого тестирования
+      batch-size: 20
+    approve:
+      fixed-delay: 10000  # 10 секунд для быстрого тестирования
+      batch-size: 20
+
+logging:
+  level:
+    com.itq.document: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql: TRACE
+    org.springframework.boot.autoconfigure.h2: DEBUG
+  pattern:
+    console: "[DEV] %d{yyyy-MM-dd HH:mm:ss} - %msg%n"

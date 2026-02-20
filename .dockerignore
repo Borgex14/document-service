@@ -1,0 +1,11 @@
+target/
+*.log
+*.md
+!README.md
+.idea/
+.git/
+.gitignore
+.mvn/
+mvnw
+mvnw.cmd
+HELP.md

@@ -1,40 +1,83 @@
+# Базовые настройки, общие для всех окружений
 spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/document_db
-    username: document_user
-    password: document_password
-    driver-class-name: org.postgresql.Driver
+  application:
+    name: document-service
+  profiles:
+    active: dev  # По умолчанию dev профиль
 
   jpa:
-    hibernate:
-      ddl-auto: validate
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-    show-sql: false
-
-  liquibase:
-    change-log: classpath:db/changelog/db.changelog-master.xml
+    show-sql: true
 
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: UTC
+    default-property-inclusion: non_null
 
-# Application settings
+
+# Server settings
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: never
+
+# Application specific settings
 app:
-  batch:
-    submit-size: 100
-    approve-size: 100
   worker:
+    pool-size: 2
     submit:
-      fixed-delay: 60000  # 1 minute
+      fixed-delay: 60000  # 1 минута
+      batch-size: 100
     approve:
-      fixed-delay: 60000  # 1 minute
+      fixed-delay: 60000  # 1 минута
+      batch-size: 100
 
+# JWT Configuration (если используется)
+jwt:
+  secret-key: ${JWT_SECRET_KEY:dGhpcy1pcy1hLXN1cGVyLXNlY3JldC1rZXktZm9yLWRldmVsb3BtZW50}
+  expiration: 86400000
+  refresh-token:
+    expiration: 604800000
+
+# Swagger/OpenAPI
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    config-url: /v3/api-docs/swagger-config
+    url: /v3/api-docs
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+    info:
+      enabled: true
+
+info:
+  app:
+    name: Document Service
+    version: 1.0.0
+    description: REST API for document management
+    developers: Borgex Team
+
+# Logging defaults
 logging:
   level:
-    com.itq.document: DEBUG
+    com.itq.document: INFO
     org.springframework.web: INFO
+    org.hibernate.SQL: WARN
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

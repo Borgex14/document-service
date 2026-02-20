@@ -1,6 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<databaseChangeLog>
-    <changeSet id="1" author="developer">
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+
+    <changeSet id="001" author="developer">
+        <!-- Precondition: создаем таблицу только если её нет -->
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="documents"/>
+            </not>
+        </preConditions>
+
+        <comment>Creating documents table</comment>
+
         <createTable tableName="documents">
             <column name="id" type="BIGINT" autoIncrement="true">
                 <constraints primaryKey="true" nullable="false"/>
@@ -24,5 +38,20 @@
                 <constraints nullable="false"/>
             </column>
         </createTable>
+
+        <addDefaultValue
+                tableName="documents"
+                columnName="created_at"
+                defaultValueComputed="CURRENT_TIMESTAMP"/>
+
+        <addDefaultValue
+                tableName="documents"
+                columnName="updated_at"
+                defaultValueComputed="CURRENT_TIMESTAMP"/>
+
+        <rollback>
+            <dropTable tableName="documents"/>
+        </rollback>
     </changeSet>
+
 </databaseChangeLog>

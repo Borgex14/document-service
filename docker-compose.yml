@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: document-db
+    environment:
+      POSTGRES_DB: document_db
+      POSTGRES_USER: document_user
+      POSTGRES_PASSWORD: document_password
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U document_user -d document_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - document-network
+
+  document-service:
+    build: .
+    container_name: document-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://document-db:5432/document_db
+      SPRING_DATASOURCE_USERNAME: document_user
+      SPRING_DATASOURCE_PASSWORD: document_password
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      APP_WORKER_SUBMIT_BATCH_SIZE: 100
+      APP_WORKER_APPROVE_BATCH_SIZE: 100
+      SPRING_PROFILES_ACTIVE: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - document-network
+
+volumes:
+  postgres_data:
+
+networks:
+  document-network:
+    driver: bridge

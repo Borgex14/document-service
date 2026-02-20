@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.9.xsd">
+
+    <changeSet id="002" author="developer">
+        <!-- Preconditions:
+             1. Таблица истории не существует
+             2. Таблица документов существует (для внешнего ключа)
+        -->
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <not>
+                    <tableExists tableName="document_history"/>
+                </not>
+                <tableExists tableName="documents"/>
+            </and>
+        </preConditions>
+
+        <comment>Creating document_history table</comment>
+
+        <createTable tableName="document_history">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="document_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="initiator" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="action" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="comment" type="TEXT"/>
+            <column name="created_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+                constraintName="fk_history_document"
+                baseTableName="document_history"
+                baseColumnNames="document_id"
+                referencedTableName="documents"
+                referencedColumnNames="id"
+                onDelete="CASCADE"/>
+
+        <addDefaultValue
+                tableName="document_history"
+                columnName="created_at"
+                defaultValueComputed="CURRENT_TIMESTAMP"/>
+
+        <rollback>
+            <dropTable tableName="document_history"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

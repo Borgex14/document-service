@@ -10,28 +10,30 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 
 @Entity
-@Table(name = "document_history")
+@Table(name = "approval_registry")
 @Getter
 @Setter
 @NoArgsConstructor
-public class History {
+public class RegistryEntry {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "document_id", nullable = false)
+    private Long documentId;
+
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "document_id", nullable = false)
+    @JoinColumn(name = "document_id", insertable = false, updatable = false)
     private Document document;
 
-    @Column(nullable = false)
-    private String initiator;
+    @Column(name = "approved_by", nullable = false)
+    private String approvedBy;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private DocumentAction action;
+    @Column(name = "approved_at", nullable = false)
+    private LocalDateTime approvedAt;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "comment")
     private String comment;
 
     @CreationTimestamp
@@ -51,8 +53,8 @@ public class History {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        History history = (History) o;
-        return id != null && Objects.equals(id, history.id);
+        RegistryEntry that = (RegistryEntry) o;
+        return id != null && Objects.equals(id, that.id);
     }
 
     @Override
@@ -62,10 +64,11 @@ public class History {
 
     @Override
     public String toString() {
-        return "History{" +
+        return "RegistryEntry{" +
                 "id=" + id +
-                ", initiator='" + initiator + '\'' +
-                ", action=" + action +
+                ", documentId=" + documentId +
+                ", approvedBy='" + approvedBy + '\'' +
+                ", approvedAt=" + approvedAt +
                 ", comment='" + comment + '\'' +
                 ", createdAt=" + createdAt +
                 '}';

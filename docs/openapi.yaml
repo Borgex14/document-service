@@ -1,0 +1,567 @@
+openapi: 3.0.1
+info:
+  title: Document Service API
+  description: REST API for document management with workflow capabilities (DRAFT -> SUBMITTED -> APPROVED)
+  version: 1.0.0
+  contact:
+    name: Borgex Team
+    email: support@itq.com
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://api.document-service.com/v1
+    description: Production server
+
+tags:
+  - name: Documents
+    description: Document management operations
+  - name: Workflow
+    description: Document workflow operations (submit/approve)
+  - name: Testing
+    description: Testing utilities
+
+paths:
+  /api/documents:
+    post:
+      tags:
+        - Documents
+      summary: Create a new document
+      description: Creates a new document in DRAFT status
+      operationId: createDocument
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDocumentRequest'
+      responses:
+        '200':
+          description: Document created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDto'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-codegen-request-body-name: request
+
+  /api/documents/{id}:
+    get:
+      tags:
+        - Documents
+      summary: Get document by ID
+      description: Returns document details with full history
+      operationId: getDocument
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Document ID
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentWithHistoryDto'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/documents/batch:
+    post:
+      tags:
+        - Documents
+      summary: Get multiple documents by IDs
+      description: Returns a list of documents for the given IDs
+      operationId: getDocumentsBatch
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Page number
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 1000
+          description: Page size
+        - name: sort
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: Sorting criteria
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: integer
+                format: int64
+                minimum: 1
+              maxItems: 1000
+              description: List of document IDs
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentDto'
+
+  /api/documents/search:
+    get:
+      tags:
+        - Documents
+      summary: Search documents
+      description: Search documents with various filters
+      operationId: searchDocuments
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, SUBMITTED, APPROVED]
+          description: Filter by document status
+        - name: author
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+          description: Filter by author (partial match)
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start date for filtering (ISO 8601)
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End date for filtering (ISO 8601)
+        - name: searchByCreatedAt
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Search by createdAt (true) or updatedAt (false)
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Page number
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 1000
+          description: Page size
+        - name: sort
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: Sorting criteria
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DocumentDto'
+                  pageable:
+                    type: object
+                  totalPages:
+                    type: integer
+                  totalElements:
+                    type: integer
+                  last:
+                    type: boolean
+                  size:
+                    type: integer
+                  number:
+                    type: integer
+                  sort:
+                    type: object
+                  numberOfElements:
+                    type: integer
+                  first:
+                    type: boolean
+                  empty:
+                    type: boolean
+
+  /api/documents/submit:
+    post:
+      tags:
+        - Workflow
+      summary: Submit documents for approval
+      description: Changes document status from DRAFT to SUBMITTED
+      operationId: submitDocuments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchOperationRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OperationResult'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-codegen-request-body-name: request
+
+  /api/documents/approve:
+    post:
+      tags:
+        - Workflow
+      summary: Approve documents
+      description: Changes document status from SUBMITTED to APPROVED and registers approval
+      operationId: approveDocuments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchOperationRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OperationResult'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/documents/concurrency-test:
+    post:
+      tags:
+        - Testing
+      summary: Test concurrent approval
+      description: Simulates multiple concurrent approval attempts to test optimistic locking
+      operationId: testConcurrentApproval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConcurrencyTestRequest'
+      responses:
+        '200':
+          description: Test completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConcurrencyTestResult'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    DocumentDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Document ID
+          example: 1
+        documentNumber:
+          type: string
+          description: Unique document number
+          example: "DOC-2025-001"
+        author:
+          type: string
+          description: Document author
+          example: "Иванов И.И."
+        title:
+          type: string
+          description: Document title
+          example: "Техническое задание"
+        status:
+          type: string
+          enum: [DRAFT, SUBMITTED, APPROVED]
+          description: Document status
+          example: "DRAFT"
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+
+    HistoryDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: History entry ID
+        initiator:
+          type: string
+          description: User who performed the action
+          example: "Иванов И.И."
+        action:
+          type: string
+          enum: [CREATE, SUBMIT, APPROVE, UPDATE]
+          description: Action performed
+          example: "SUBMIT"
+        comment:
+          type: string
+          description: Optional comment
+          example: "Отправлено на утверждение"
+        createdAt:
+          type: string
+          format: date-time
+          description: Action timestamp
+
+    DocumentWithHistoryDto:
+      type: object
+      properties:
+        document:
+          $ref: '#/components/schemas/DocumentDto'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryDto'
+
+    CreateDocumentRequest:
+      type: object
+      required:
+        - author
+        - title
+      properties:
+        author:
+          type: string
+          minLength: 2
+          maxLength: 100
+          description: Document author
+          example: "Иванов И.И."
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Document title
+          example: "Техническое задание"
+
+    BatchOperationRequest:
+      type: object
+      required:
+        - ids
+        - initiator
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+          description: List of document IDs to process
+          example: [1, 2, 3]
+        initiator:
+          type: string
+          minLength: 2
+          maxLength: 100
+          description: User performing the operation
+          example: "Иванов И.И."
+        comment:
+          type: string
+          description: Optional comment
+          example: "Массовая отправка документов"
+
+    DocumentSearchCriteria:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [DRAFT, SUBMITTED, APPROVED]
+          description: Filter by document status
+        author:
+          type: string
+          maxLength: 100
+          description: Filter by author (partial match)
+        dateFrom:
+          type: string
+          format: date-time
+          description: Start date for filtering
+        dateTo:
+          type: string
+          format: date-time
+          description: End date for filtering
+        searchByCreatedAt:
+          type: boolean
+          default: true
+          description: Search by createdAt (true) or updatedAt (false)
+
+    OperationResult:
+      type: object
+      properties:
+        documentId:
+          type: integer
+          format: int64
+          description: Document ID
+        status:
+          type: string
+          enum: [SUCCESS, CONFLICT, NOT_FOUND, REGISTRY_ERROR]
+          description: Operation result status
+        message:
+          type: string
+          description: Result message
+          example: "Document approved successfully"
+
+    ConcurrencyTestRequest:
+      type: object
+      required:
+        - documentId
+      properties:
+        documentId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Document ID to test
+          example: 1
+        threads:
+          type: integer
+          minimum: 1
+          default: 10
+          description: Number of concurrent threads
+          example: 10
+        attempts:
+          type: integer
+          minimum: 1
+          default: 100
+          description: Number of total attempts
+          example: 100
+        initiator:
+          type: string
+          default: "concurrency-test"
+          description: Initiator name for test
+          example: "concurrency-test"
+
+    ConcurrencyTestResult:
+      type: object
+      properties:
+        documentId:
+          type: integer
+          format: int64
+          description: Document ID
+        totalAttempts:
+          type: integer
+          description: Total number of attempts
+        successfulAttempts:
+          type: integer
+          description: Number of successful approvals
+        conflictAttempts:
+          type: integer
+          description: Number of conflict errors
+        errorAttempts:
+          type: integer
+          description: Number of other errors
+        finalStatus:
+          type: string
+          enum: [DRAFT, SUBMITTED, APPROVED]
+          description: Final document status
+        registryEntriesCount:
+          type: integer
+          format: int64
+          description: Number of registry entries
+        details:
+          type: object
+          description: Additional test details
+          additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+        status:
+          type: integer
+          description: HTTP status code
+          example: 400
+        error:
+          type: string
+          description: Error type
+          example: "Bad Request"
+        message:
+          type: string
+          description: Error message
+          example: "Invalid request parameters"
+        path:
+          type: string
+          description: Request path
+          example: "/api/documents"
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
