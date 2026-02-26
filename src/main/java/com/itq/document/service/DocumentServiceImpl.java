@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -199,17 +200,33 @@ public class DocumentServiceImpl implements DocumentService {
 
         for (Long documentId : request.getIds()) {
             try {
-                // Используем отдельную транзакцию для каждого документа с оптимистичной блокировкой
+                // Используем отдельную транзакцию для каждого документа
                 OperationResult result = approveSingleDocument(documentId, request);
                 results.add(result);
 
-            } catch (Exception e) {
-                log.error("Error approving document {}: {}", documentId, e.getMessage());
+            } catch (DocumentNotFoundException e) {
                 results.add(OperationResult.builder()
                         .documentId(documentId)
-                        .status(OperationResult.OperationStatus.CONFLICT)
-                        .message("Error processing document: " + e.getMessage())
+                        .status(OperationResult.OperationStatus.NOT_FOUND)
+                        .message("Document not found")
                         .build());
+            } catch (Exception e) {
+                log.error("Error approving document {}: {}", documentId, e.getMessage());
+
+                // Определяем тип ошибки по сообщению
+                if (e.getMessage() != null && e.getMessage().contains("Failed to register")) {
+                    results.add(OperationResult.builder()
+                            .documentId(documentId)
+                            .status(OperationResult.OperationStatus.REGISTRY_ERROR)
+                            .message(e.getMessage())
+                            .build());
+                } else {
+                    results.add(OperationResult.builder()
+                            .documentId(documentId)
+                            .status(OperationResult.OperationStatus.CONFLICT)
+                            .message("Error processing document: " + e.getMessage())
+                            .build());
+                }
             }
         }
 
@@ -221,81 +238,67 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     protected OperationResult approveSingleDocument(Long documentId, BatchOperationRequest request) {
-        try {
-            Document document = documentRepository.findById(documentId)
-                    .orElseThrow(() -> new DocumentNotFoundException(documentId));
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new DocumentNotFoundException(documentId));
 
-            if (document.getStatus() != DocumentStatus.SUBMITTED) {
-                return OperationResult.builder()
-                        .documentId(documentId)
-                        .status(OperationResult.OperationStatus.CONFLICT)
-                        .message(String.format("Document is in %s status, expected SUBMITTED",
-                                document.getStatus()))
-                        .build();
-            }
-
-            // Проверяем, нет ли уже записи в реестре
-            if (registryRepository.existsByDocumentId(documentId)) {
-                return OperationResult.builder()
-                        .documentId(documentId)
-                        .status(OperationResult.OperationStatus.CONFLICT)
-                        .message("Document already has registry entry")
-                        .build();
-            }
-
-            // АТОМАРНАЯ ОПЕРАЦИЯ: создаём всё в одной транзакции
-            try {
-                // 1. Создаём запись в реестре
-                RegistryEntry registryEntry = new RegistryEntry();
-                registryEntry.setDocumentId(documentId);
-                registryEntry.setApprovedBy(request.getInitiator());
-                registryEntry.setApprovedAt(LocalDateTime.now());
-                registryEntry.setCreatedAt(LocalDateTime.now());
-
-                // Сначала сохраняем registry
-                registryRepository.saveAndFlush(registryEntry);
-
-                // 2. Обновляем статус документа
-                document.setStatus(DocumentStatus.APPROVED);
-                documentRepository.save(document);
-
-                // 3. Создаём запись в истории
-                History history = new History();
-                history.setDocument(document);
-                history.setInitiator(request.getInitiator());
-                history.setAction(DocumentAction.APPROVE);
-                history.setComment(request.getComment());
-                history.setCreatedAt(LocalDateTime.now());
-                historyRepository.save(history);
-
-                // Если всё успешно - коммит
-                return OperationResult.builder()
-                        .documentId(documentId)
-                        .status(OperationResult.OperationStatus.SUCCESS)
-                        .message("Document approved successfully")
-                        .build();
-
-            } catch (Exception e) {
-                // Если любая ошибка - транзакция откатится автоматически
-                log.error("Failed to approve document {}: {}", documentId, e.getMessage());
-                throw e; // Пробрасываем для отката транзакции
-            }
-
-        } catch (DocumentNotFoundException e) {
-            return OperationResult.builder()
-                    .documentId(documentId)
-                    .status(OperationResult.OperationStatus.NOT_FOUND)
-                    .message("Document not found")
-                    .build();
-        } catch (OptimisticLockException e) {
-            log.warn("Optimistic lock exception for document {}: {}", documentId, e.getMessage());
+        if (document.getStatus() != DocumentStatus.SUBMITTED) {
             return OperationResult.builder()
                     .documentId(documentId)
                     .status(OperationResult.OperationStatus.CONFLICT)
-                    .message("Document was modified by another transaction")
+                    .message(String.format("Document is in %s status, expected SUBMITTED",
+                            document.getStatus()))
                     .build();
+        }
+
+        // Проверяем, нет ли уже записи в реестре
+        if (registryRepository.existsByDocumentId(documentId)) {
+            return OperationResult.builder()
+                    .documentId(documentId)
+                    .status(OperationResult.OperationStatus.CONFLICT)
+                    .message("Document already has registry entry")
+                    .build();
+        }
+
+        // Атомарная операция
+        try {
+            // 1. Создаём запись в реестре
+            RegistryEntry registryEntry = new RegistryEntry();
+            registryEntry.setDocumentId(documentId);
+            registryEntry.setApprovedBy(request.getInitiator());
+            registryEntry.setApprovedAt(LocalDateTime.now());
+            registryEntry.setCreatedAt(LocalDateTime.now());
+
+            registryRepository.saveAndFlush(registryEntry);
+
+            // 2. Обновляем статус документа
+            document.setStatus(DocumentStatus.APPROVED);
+            documentRepository.save(document);
+
+            // 3. Создаём запись в истории
+            History history = new History();
+            history.setDocument(document);
+            history.setInitiator(request.getInitiator());
+            history.setAction(DocumentAction.APPROVE);
+            history.setComment(request.getComment());
+            history.setCreatedAt(LocalDateTime.now());
+            historyRepository.save(history);
+
+            return OperationResult.builder()
+                    .documentId(documentId)
+                    .status(OperationResult.OperationStatus.SUCCESS)
+                    .message("Document approved successfully")
+                    .build();
+
+        } catch (ObjectOptimisticLockingFailureException e) {
+            log.warn("Optimistic lock exception for document {}: {}", documentId, e.getMessage());
+            throw new RuntimeException("Document was modified by another transaction", e);
+
         } catch (Exception e) {
-            log.error("Error approving document {}: {}", documentId, e.getMessage());
+            log.error("Failed to approve document {}: {}", documentId, e.getMessage());
+            // Пробрасываем с маркером REGISTRY_ERROR, если ошибка при сохранении registry
+            if (e.getMessage() != null && e.getMessage().contains("registry")) {
+                throw new RuntimeException("Failed to register approval: " + e.getMessage(), e);
+            }
             throw e;
         }
     }
