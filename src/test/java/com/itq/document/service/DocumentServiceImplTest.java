@@ -124,18 +124,20 @@ class DocumentServiceImplTest {
         history1.setDocument(testDocument);
         history1.setInitiator(TEST_INITIATOR);
         history1.setAction(DocumentAction.SUBMIT);
-        // Не устанавливаем createdAt - он auto-generated
+        history1.setCreatedAt(LocalDateTime.now().minusDays(1));
 
         History history2 = new History();
         history2.setId(2L);
         history2.setDocument(testDocument);
         history2.setInitiator(TEST_APPROVER);
         history2.setAction(DocumentAction.APPROVE);
-        // Не устанавливаем createdAt - он auto-generated
+        history2.setCreatedAt(LocalDateTime.now());
 
-        when(documentRepository.findById(TEST_DOC_ID)).thenReturn(Optional.of(testDocument));
-        when(historyRepository.findByDocumentIdOrderByCreatedAtDesc(TEST_DOC_ID))
-                .thenReturn(List.of(history2, history1));
+        testDocument.setHistory(List.of(history2, history1));
+
+        // ИСПРАВЛЕНО: мокаем findByIdWithHistory, а не findById
+        when(documentRepository.findByIdWithHistory(TEST_DOC_ID))
+                .thenReturn(Optional.of(testDocument));
 
         // When
         DocumentWithHistoryDto result = documentService.getDocumentWithHistory(TEST_DOC_ID);
@@ -146,13 +148,17 @@ class DocumentServiceImplTest {
         assertThat(result.getHistory()).hasSize(2);
         assertThat(result.getHistory().get(0).getAction()).isEqualTo("APPROVE");
         assertThat(result.getHistory().get(1).getAction()).isEqualTo("SUBMIT");
+
+        verify(documentRepository).findByIdWithHistory(TEST_DOC_ID);
+        verify(historyRepository, never()).findByDocumentIdOrderByCreatedAtDesc(anyLong());
     }
 
     @Test
     @DisplayName("Получение несуществующего документа - выбрасывает исключение")
     void getDocumentWithHistory_NotFound_ThrowsException() {
         // Given
-        when(documentRepository.findById(999L)).thenReturn(Optional.empty());
+        // ИСПРАВЛЕНО: мокаем findByIdWithHistory, а не findById
+        when(documentRepository.findByIdWithHistory(999L)).thenReturn(Optional.empty());
 
         // When/Then
         assertThatThrownBy(() -> documentService.getDocumentWithHistory(999L))
@@ -164,24 +170,49 @@ class DocumentServiceImplTest {
     @DisplayName("Happy Path: Получение батча документов")
     void getDocumentsBatch_Success() {
         // Given
+        // Первый документ уже есть в testDocument (создан в setUp)
+
         Document doc2 = new Document();
         doc2.setId(2L);
         doc2.setDocumentNumber("DOC-002");
         doc2.setAuthor("Автор 2");
         doc2.setTitle("Документ 2");
         doc2.setStatus(DocumentStatus.SUBMITTED);
+        // НЕ УСТАНАВЛИВАЕМ:
+        // - createdAt (auto-generated)
+        // - updatedAt (auto-generated)
+        // - version (auto-generated @Version)
+        // - history (может быть null)
 
         List<Long> ids = List.of(1L, 2L);
-        when(documentRepository.findAllById(ids)).thenReturn(List.of(testDocument, doc2));
+
+        // Мокаем метод репозитория
+        when(documentRepository.findAllByIdWithHistory(ids))
+                .thenReturn(List.of(testDocument, doc2));
 
         // When
         List<DocumentDto> result = documentService.getDocumentsBatch(ids, Pageable.unpaged());
 
         // Then
         assertThat(result).hasSize(2);
+
+        // Проверяем первый документ
         assertThat(result.get(0).getId()).isEqualTo(1L);
+        assertThat(result.get(0).getDocumentNumber()).isEqualTo(TEST_DOC_NUMBER);
+        assertThat(result.get(0).getAuthor()).isEqualTo(TEST_AUTHOR);
+        assertThat(result.get(0).getTitle()).isEqualTo(TEST_TITLE);
+        assertThat(result.get(0).getStatus()).isEqualTo(DocumentStatus.DRAFT.name());
+
+        // Проверяем второй документ
         assertThat(result.get(1).getId()).isEqualTo(2L);
+        assertThat(result.get(1).getDocumentNumber()).isEqualTo("DOC-002");
+        assertThat(result.get(1).getAuthor()).isEqualTo("Автор 2");
+        assertThat(result.get(1).getTitle()).isEqualTo("Документ 2");
         assertThat(result.get(1).getStatus()).isEqualTo(DocumentStatus.SUBMITTED.name());
+
+        // Проверяем вызовы репозитория
+        verify(documentRepository).findAllByIdWithHistory(ids);
+        verify(documentRepository, never()).findAllById(any());
     }
 
     // ========================================================================
@@ -527,7 +558,7 @@ class DocumentServiceImplTest {
     void searchDocuments_ByCreatedAt() {
         // Given
         DocumentSearchCriteria criteria = DocumentSearchCriteria.builder()
-                .status(DocumentStatus.SUBMITTED.name())
+                .status(DocumentStatus.SUBMITTED)
                 .author(TEST_AUTHOR)
                 .dateFrom(LocalDateTime.now().minusDays(7))
                 .dateTo(LocalDateTime.now())
@@ -558,7 +589,7 @@ class DocumentServiceImplTest {
     void searchDocuments_ByUpdatedAt() {
         // Given
         DocumentSearchCriteria criteria = DocumentSearchCriteria.builder()
-                .status(DocumentStatus.APPROVED.name())
+                .status(DocumentStatus.APPROVED)
                 .author(TEST_AUTHOR)
                 .dateFrom(LocalDateTime.now().minusDays(30))
                 .dateTo(LocalDateTime.now())
