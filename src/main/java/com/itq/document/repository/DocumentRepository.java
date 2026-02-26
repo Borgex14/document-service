@@ -4,6 +4,7 @@ import com.itq.document.model.Document;
 import com.itq.document.model.DocumentStatus;
 import org.springframework.data.domain.Page;  // ИСПРАВЛЕНО: правильный импорт
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +16,20 @@ import java.util.Optional;
 
 @Repository
 public interface DocumentRepository extends JpaRepository<Document, Long> {
+
+    /**
+     * Находит документ по ID с предзагрузкой истории (решает N+1)
+     */
+    @EntityGraph(attributePaths = {"history"})
+    @Query("SELECT d FROM Document d WHERE d.id = :id")
+    Optional<Document> findByIdWithHistory(@Param("id") Long id);
+
+    /**
+     * Находит все документы по списку ID с предзагрузкой истории
+     */
+    @EntityGraph(attributePaths = {"history"})
+    @Query("SELECT d FROM Document d WHERE d.id IN :ids")
+    List<Document> findAllByIdWithHistory(@Param("ids") List<Long> ids);
 
     Optional<Document> findByDocumentNumber(String documentNumber);
 
