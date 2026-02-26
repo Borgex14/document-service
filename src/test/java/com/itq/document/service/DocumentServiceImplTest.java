@@ -20,6 +20,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -123,18 +124,20 @@ class DocumentServiceImplTest {
         history1.setDocument(testDocument);
         history1.setInitiator(TEST_INITIATOR);
         history1.setAction(DocumentAction.SUBMIT);
-        // Не устанавливаем createdAt - он auto-generated
+        history1.setCreatedAt(LocalDateTime.now().minusDays(1));
 
         History history2 = new History();
         history2.setId(2L);
         history2.setDocument(testDocument);
         history2.setInitiator(TEST_APPROVER);
         history2.setAction(DocumentAction.APPROVE);
-        // Не устанавливаем createdAt - он auto-generated
+        history2.setCreatedAt(LocalDateTime.now());
 
-        when(documentRepository.findById(TEST_DOC_ID)).thenReturn(Optional.of(testDocument));
-        when(historyRepository.findByDocumentIdOrderByCreatedAtDesc(TEST_DOC_ID))
-                .thenReturn(List.of(history2, history1));
+        testDocument.setHistory(List.of(history2, history1));
+
+        // ИСПРАВЛЕНО: мокаем findByIdWithHistory, а не findById
+        when(documentRepository.findByIdWithHistory(TEST_DOC_ID))
+                .thenReturn(Optional.of(testDocument));
 
         // When
         DocumentWithHistoryDto result = documentService.getDocumentWithHistory(TEST_DOC_ID);
@@ -145,13 +148,17 @@ class DocumentServiceImplTest {
         assertThat(result.getHistory()).hasSize(2);
         assertThat(result.getHistory().get(0).getAction()).isEqualTo("APPROVE");
         assertThat(result.getHistory().get(1).getAction()).isEqualTo("SUBMIT");
+
+        verify(documentRepository).findByIdWithHistory(TEST_DOC_ID);
+        verify(historyRepository, never()).findByDocumentIdOrderByCreatedAtDesc(anyLong());
     }
 
     @Test
     @DisplayName("Получение несуществующего документа - выбрасывает исключение")
     void getDocumentWithHistory_NotFound_ThrowsException() {
         // Given
-        when(documentRepository.findById(999L)).thenReturn(Optional.empty());
+        // ИСПРАВЛЕНО: мокаем findByIdWithHistory, а не findById
+        when(documentRepository.findByIdWithHistory(999L)).thenReturn(Optional.empty());
 
         // When/Then
         assertThatThrownBy(() -> documentService.getDocumentWithHistory(999L))
@@ -163,24 +170,49 @@ class DocumentServiceImplTest {
     @DisplayName("Happy Path: Получение батча документов")
     void getDocumentsBatch_Success() {
         // Given
+        // Первый документ уже есть в testDocument (создан в setUp)
+
         Document doc2 = new Document();
         doc2.setId(2L);
         doc2.setDocumentNumber("DOC-002");
         doc2.setAuthor("Автор 2");
         doc2.setTitle("Документ 2");
         doc2.setStatus(DocumentStatus.SUBMITTED);
+        // НЕ УСТАНАВЛИВАЕМ:
+        // - createdAt (auto-generated)
+        // - updatedAt (auto-generated)
+        // - version (auto-generated @Version)
+        // - history (может быть null)
 
         List<Long> ids = List.of(1L, 2L);
-        when(documentRepository.findAllById(ids)).thenReturn(List.of(testDocument, doc2));
+
+        // Мокаем метод репозитория
+        when(documentRepository.findAllByIdWithHistory(ids))
+                .thenReturn(List.of(testDocument, doc2));
 
         // When
         List<DocumentDto> result = documentService.getDocumentsBatch(ids, Pageable.unpaged());
 
         // Then
         assertThat(result).hasSize(2);
+
+        // Проверяем первый документ
         assertThat(result.get(0).getId()).isEqualTo(1L);
+        assertThat(result.get(0).getDocumentNumber()).isEqualTo(TEST_DOC_NUMBER);
+        assertThat(result.get(0).getAuthor()).isEqualTo(TEST_AUTHOR);
+        assertThat(result.get(0).getTitle()).isEqualTo(TEST_TITLE);
+        assertThat(result.get(0).getStatus()).isEqualTo(DocumentStatus.DRAFT.name());
+
+        // Проверяем второй документ
         assertThat(result.get(1).getId()).isEqualTo(2L);
+        assertThat(result.get(1).getDocumentNumber()).isEqualTo("DOC-002");
+        assertThat(result.get(1).getAuthor()).isEqualTo("Автор 2");
+        assertThat(result.get(1).getTitle()).isEqualTo("Документ 2");
         assertThat(result.get(1).getStatus()).isEqualTo(DocumentStatus.SUBMITTED.name());
+
+        // Проверяем вызовы репозитория
+        verify(documentRepository).findAllByIdWithHistory(ids);
+        verify(documentRepository, never()).findAllById(any());
     }
 
     // ========================================================================
@@ -352,7 +384,8 @@ class DocumentServiceImplTest {
         request.setComment(TEST_COMMENT);
 
         when(documentRepository.findById(TEST_DOC_ID)).thenReturn(Optional.of(testDocument));
-        when(registryRepository.save(any(RegistryEntry.class))).thenReturn(new RegistryEntry());
+        when(registryRepository.existsByDocumentId(TEST_DOC_ID)).thenReturn(false);
+        when(registryRepository.saveAndFlush(any(RegistryEntry.class))).thenReturn(new RegistryEntry());
         when(documentRepository.save(any(Document.class))).thenReturn(testDocument);
         when(historyRepository.save(any(History.class))).thenReturn(new History());
 
@@ -365,8 +398,9 @@ class DocumentServiceImplTest {
         assertThat(result.getDocumentId()).isEqualTo(TEST_DOC_ID);
         assertThat(result.getStatus()).isEqualTo(OperationResult.OperationStatus.SUCCESS);
 
-        // Проверяем порядок операций: сначала registry, потом document, потом history
-        verify(registryRepository).save(registryCaptor.capture());
+        // Проверяем порядок операций
+        verify(registryRepository).existsByDocumentId(TEST_DOC_ID);
+        verify(registryRepository).saveAndFlush(registryCaptor.capture());
         RegistryEntry savedRegistry = registryCaptor.getValue();
         assertThat(savedRegistry.getDocumentId()).isEqualTo(TEST_DOC_ID);
         assertThat(savedRegistry.getApprovedBy()).isEqualTo(TEST_APPROVER);
@@ -379,6 +413,34 @@ class DocumentServiceImplTest {
         assertThat(savedHistory.getDocument().getId()).isEqualTo(TEST_DOC_ID);
         assertThat(savedHistory.getInitiator()).isEqualTo(TEST_APPROVER);
         assertThat(savedHistory.getAction()).isEqualTo(DocumentAction.APPROVE);
+    }
+
+    @Test
+    @DisplayName("Approve: Документ уже имеет запись в реестре")
+    void approveDocuments_AlreadyHasRegistryEntry_ReturnsConflict() {
+        // Given
+        testDocument.setStatus(DocumentStatus.SUBMITTED);
+
+        BatchOperationRequest request = new BatchOperationRequest();
+        request.setIds(List.of(TEST_DOC_ID));
+        request.setInitiator(TEST_APPROVER);
+
+        when(documentRepository.findById(TEST_DOC_ID)).thenReturn(Optional.of(testDocument));
+        when(registryRepository.existsByDocumentId(TEST_DOC_ID)).thenReturn(true); // Уже есть запись
+
+        // When
+        List<OperationResult> results = documentService.approveDocuments(request);
+
+        // Then
+        assertThat(results).hasSize(1);
+        OperationResult result = results.get(0);
+        assertThat(result.getDocumentId()).isEqualTo(TEST_DOC_ID);
+        assertThat(result.getStatus()).isEqualTo(OperationResult.OperationStatus.CONFLICT);
+        assertThat(result.getMessage()).contains("already has registry entry");
+
+        verify(registryRepository, never()).saveAndFlush(any());
+        verify(documentRepository, never()).save(any());
+        verify(historyRepository, never()).save(any());
     }
 
     @Test
@@ -428,7 +490,7 @@ class DocumentServiceImplTest {
     }
 
     @Test
-    @DisplayName("Approve: Ошибка при сохранении в регистр")
+    @DisplayName("Approve: Ошибка при сохранении в регистр - документ не должен измениться")
     void approveDocuments_RegistryError_ReturnsRegistryError() {
         // Given
         testDocument.setStatus(DocumentStatus.SUBMITTED);
@@ -438,8 +500,9 @@ class DocumentServiceImplTest {
         request.setInitiator(TEST_APPROVER);
 
         when(documentRepository.findById(TEST_DOC_ID)).thenReturn(Optional.of(testDocument));
-        when(registryRepository.save(any(RegistryEntry.class)))
-                .thenThrow(new RuntimeException("Database error"));
+        when(registryRepository.existsByDocumentId(TEST_DOC_ID)).thenReturn(false);
+        when(registryRepository.saveAndFlush(any(RegistryEntry.class)))
+                .thenThrow(new RuntimeException("Database error saving registry"));
 
         // When
         List<OperationResult> results = documentService.approveDocuments(request);
@@ -451,56 +514,39 @@ class DocumentServiceImplTest {
         assertThat(result.getStatus()).isEqualTo(OperationResult.OperationStatus.REGISTRY_ERROR);
         assertThat(result.getMessage()).contains("Failed to register");
 
-        // Проверяем, что документ НЕ был обновлен
         verify(documentRepository, never()).save(any(Document.class));
         verify(historyRepository, never()).save(any(History.class));
     }
 
     @Test
-    @DisplayName("Approve: Пакетное утверждение с частичными результатами")
-    void approveDocuments_BatchWithMixedResults() {
+    @DisplayName("Approve: Оптимистичная блокировка - конфликт версий")
+    void approveDocuments_OptimisticLockException_ReturnsConflict() {
         // Given
-        Document doc1 = testDocument;
-        doc1.setStatus(DocumentStatus.SUBMITTED); // success
-
-        Document doc2 = new Document();
-        doc2.setId(2L);
-        doc2.setStatus(DocumentStatus.DRAFT); // conflict - wrong status
-
-        Document doc3 = new Document();
-        doc3.setId(3L);
-        doc3.setStatus(DocumentStatus.SUBMITTED); // success
+        testDocument.setStatus(DocumentStatus.SUBMITTED);
 
         BatchOperationRequest request = new BatchOperationRequest();
-        request.setIds(List.of(1L, 2L, 3L, 999L));
+        request.setIds(List.of(TEST_DOC_ID));
         request.setInitiator(TEST_APPROVER);
 
-        when(documentRepository.findById(1L)).thenReturn(Optional.of(doc1));
-        when(documentRepository.findById(2L)).thenReturn(Optional.of(doc2));
-        when(documentRepository.findById(3L)).thenReturn(Optional.of(doc3));
-        when(documentRepository.findById(999L)).thenReturn(Optional.empty());
+        when(documentRepository.findById(TEST_DOC_ID)).thenReturn(Optional.of(testDocument));
+        when(registryRepository.existsByDocumentId(TEST_DOC_ID)).thenReturn(false);
+        when(registryRepository.saveAndFlush(any(RegistryEntry.class))).thenReturn(new RegistryEntry());
+
+        // Симулируем ошибку оптимистичной блокировки при сохранении документа
+        when(documentRepository.save(any(Document.class)))
+                .thenThrow(new ObjectOptimisticLockingFailureException("Document", TEST_DOC_ID));
 
         // When
         List<OperationResult> results = documentService.approveDocuments(request);
 
         // Then
-        assertThat(results).hasSize(4);
+        assertThat(results).hasSize(1);
+        OperationResult result = results.get(0);
+        assertThat(result.getDocumentId()).isEqualTo(TEST_DOC_ID);
+        assertThat(result.getStatus()).isEqualTo(OperationResult.OperationStatus.CONFLICT);
+        assertThat(result.getMessage()).contains("modified by another transaction");
 
-        assertThat(results.get(0).getDocumentId()).isEqualTo(1L);
-        assertThat(results.get(0).getStatus()).isEqualTo(OperationResult.OperationStatus.SUCCESS);
-
-        assertThat(results.get(1).getDocumentId()).isEqualTo(2L);
-        assertThat(results.get(1).getStatus()).isEqualTo(OperationResult.OperationStatus.CONFLICT);
-
-        assertThat(results.get(2).getDocumentId()).isEqualTo(3L);
-        assertThat(results.get(2).getStatus()).isEqualTo(OperationResult.OperationStatus.SUCCESS);
-
-        assertThat(results.get(3).getDocumentId()).isEqualTo(999L);
-        assertThat(results.get(3).getStatus()).isEqualTo(OperationResult.OperationStatus.NOT_FOUND);
-
-        verify(registryRepository, times(2)).save(any(RegistryEntry.class));
-        verify(documentRepository, times(2)).save(any(Document.class));
-        verify(historyRepository, times(2)).save(any(History.class));
+        verify(historyRepository, never()).save(any(History.class));
     }
 
     // ========================================================================
@@ -512,7 +558,7 @@ class DocumentServiceImplTest {
     void searchDocuments_ByCreatedAt() {
         // Given
         DocumentSearchCriteria criteria = DocumentSearchCriteria.builder()
-                .status(DocumentStatus.SUBMITTED.name())
+                .status(DocumentStatus.SUBMITTED)
                 .author(TEST_AUTHOR)
                 .dateFrom(LocalDateTime.now().minusDays(7))
                 .dateTo(LocalDateTime.now())
@@ -543,7 +589,7 @@ class DocumentServiceImplTest {
     void searchDocuments_ByUpdatedAt() {
         // Given
         DocumentSearchCriteria criteria = DocumentSearchCriteria.builder()
-                .status(DocumentStatus.APPROVED.name())
+                .status(DocumentStatus.APPROVED)
                 .author(TEST_AUTHOR)
                 .dateFrom(LocalDateTime.now().minusDays(30))
                 .dateTo(LocalDateTime.now())

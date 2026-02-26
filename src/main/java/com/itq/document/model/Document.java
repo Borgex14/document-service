@@ -47,7 +47,7 @@ public class Document {
     @Version
     private Long version;
 
-    @OneToMany(mappedBy = "document", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "document", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private List<History> history = new ArrayList<>();
 
     // Кастомные сеттеры для защиты полей

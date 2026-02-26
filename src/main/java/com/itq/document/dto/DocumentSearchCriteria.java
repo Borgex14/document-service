@@ -1,5 +1,6 @@
 package com.itq.document.dto;
 
+import com.itq.document.model.DocumentStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -12,7 +13,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DocumentSearchCriteria {
-    private String status;
+    private DocumentStatus status;
     private String author;
 
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
