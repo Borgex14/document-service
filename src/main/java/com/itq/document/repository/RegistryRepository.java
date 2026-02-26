@@ -2,6 +2,8 @@ package com.itq.document.repository;
 
 import com.itq.document.model.RegistryEntry;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -14,7 +16,8 @@ public interface RegistryRepository extends JpaRepository<RegistryEntry, Long> {
 
     Optional<RegistryEntry> findByDocumentIdAndApprovedBy(Long documentId, String approvedBy);
 
-    long countByDocumentId(Long documentId);
+    @Query("SELECT COUNT(r) FROM RegistryEntry r WHERE r.documentId = :documentId")
+    long countByDocumentId(@Param("documentId") Long documentId);
 
     boolean existsByDocumentId(Long documentId);
 
